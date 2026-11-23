@@ -1,0 +1,75 @@
+# Reusable leak gate for public REIKA repos: gitleaks (secrets) + a private-name denylist.
+# The denylist (one term per line, case-insensitive, fixed strings) lives only in the caller's secret LEAK_DENYLIST;
+# this workflow never prints a term or a matching line, only file paths and counts.
+# Caller:
+#   jobs:
+#     leak:
+#       uses: askreikaco/reika-ci/.github/workflows/shared-leak-check.yml@main
+#       secrets:
+#         LEAK_DENYLIST: ${{ secrets.LEAK_DENYLIST }}
+name: shared-leak-check
+on:
+  workflow_call:
+    inputs:
+      scan-history:
+        description: also scan every commit reachable from HEAD (slow; use before a first public push)
+        type: boolean
+        default: false
+      exclude:
+        description: extra git pathspec excludes, space-separated (e.g. ':!ops/**')
+        type: string
+        default: ''
+    secrets:
+      LEAK_DENYLIST:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  leak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.scan-history && 0 || 1 }}
+      - name: gitleaks (secrets)
+        env:
+          GL_VERSION: 8.21.2
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GL_VERSION}/gitleaks_${GL_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          if [ "${{ inputs.scan-history }}" = "true" ]; then ./gitleaks git --redact --no-banner .; else ./gitleaks dir --redact --no-banner .; fi
+      - name: private-name denylist (tree)
+        env:
+          LEAK_DENYLIST: ${{ secrets.LEAK_DENYLIST }}
+          EXCLUDE: ${{ inputs.exclude }}
+        run: |
+          set -euo pipefail
+          if [ -z "${LEAK_DENYLIST:-}" ]; then echo "::notice::LEAK_DENYLIST not set: denylist step skipped"; exit 0; fi
+          umask 077; list=$(mktemp); printf '%s\n' "$LEAK_DENYLIST" | sed '/^[[:space:]]*$/d' > "$list"
+          # shellcheck disable=SC2086
+          hits=$(git grep -I -l -i -F -f "$list" -- . $EXCLUDE || true)
+          rm -f "$list"
+          if [ -n "$hits" ]; then
+            echo "::error::private terms found in $(printf '%s\n' "$hits" | wc -l) file(s) (terms not shown):"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "denylist: clean"
+      - name: private-name denylist (history)
+        if: inputs.scan-history
+        env:
+          LEAK_DENYLIST: ${{ secrets.LEAK_DENYLIST }}
+        run: |
+          set -euo pipefail
+          [ -n "${LEAK_DENYLIST:-}" ] || exit 0
+          umask 077; list=$(mktemp); printf '%s\n' "$LEAK_DENYLIST" | sed '/^[[:space:]]*$/d' > "$list"
+          n=0
+          for c in $(git rev-list HEAD); do
+            if git grep -I -q -i -F -f "$list" "$c" -- . 2>/dev/null; then n=$((n+1)); echo "commit $c has a private term"; fi
+          done
+          rm -f "$list"
+          [ "$n" -eq 0 ] || { echo "::error::$n commit(s) contain private terms"; exit 1; }
+          echo "denylist history: clean"

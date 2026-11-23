@@ -1,0 +1,13 @@
+# reika-ci checks itself with its own leak gate (dogfood).
+name: leak
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  leak:
+    uses: ./.github/workflows/shared-leak-check.yml
+    secrets:
+      LEAK_DENYLIST: ${{ secrets.LEAK_DENYLIST }}
