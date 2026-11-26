@@ -1,0 +1,99 @@
+# Reusable PHP gate on changed files: php -l (syntax, hard fail) and PHPCS with
+# WordPress-Coding-Standards 3.4.1 as a ratchet (error count must not rise vs base).
+# Caller:
+#   jobs:
+#     php:
+#       uses: askreikaco/reika-ci/.github/workflows/php-gates.yml@v1
+#       with:
+#         php_paths: '.'
+name: php-gates
+on:
+  workflow_call:
+    inputs:
+      php_paths:
+        description: space-separated git pathspecs to limit the changed-file scan (default whole repo)
+        type: string
+        default: '.'
+      runner:
+        description: runner label; empty uses vars.CI_RUNNER, then reika-ci
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER || 'reika-ci' }}
+    timeout-minutes: 15
+    steps:
+      - name: checkout head (full history for the diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: resolve base and changed PHP files
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PHP_PATHS: ${{ inputs.php_paths }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$(git rev-parse --verify -q HEAD~1 || git hash-object -t tree /dev/null)"
+          fi
+          echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+          read -ra paths <<< "$PHP_PATHS"
+          git diff --name-only --diff-filter=ACMR "$base" HEAD -- "${paths[@]}" | grep -E '\.php$' > "$RUNNER_TEMP/php-files.txt" || true
+          echo "changed PHP files: $(wc -l < "$RUNNER_TEMP/php-files.txt")"
+          cat "$RUNNER_TEMP/php-files.txt"
+
+      - name: php -l (syntax)
+        run: |
+          set -euo pipefail
+          php -v | head -1
+          status=0
+          while IFS= read -r f; do
+            if [ -f "$f" ]; then php -l "$f" || status=1; fi
+          done < "$RUNNER_TEMP/php-files.txt"
+          exit $status
+
+      - name: export base tree
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/php-base"
+          git archive "$BASE_SHA" | tar -x -C "$RUNNER_TEMP/php-base"
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: checkout reika-ci gate sources (same ref as this workflow)
+        uses: actions/checkout@v4
+        with:
+          repository: askreikaco/reika-ci
+          ref: ${{ github.job_workflow_sha }}
+          path: .php-gate-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: install phpcs and WordPress-Coding-Standards 3.4.1
+        env:
+          TOOLS_DIR: ${{ runner.temp }}/phpcs-tools
+        run: |
+          set -euo pipefail
+          mkdir -p "$TOOLS_DIR"
+          composer require --working-dir="$TOOLS_DIR" --no-interaction --no-progress \
+            squizlabs/php_codesniffer:3.13.6 wp-coding-standards/wpcs:3.4.1 \
+            phpcsstandards/phpcsutils:1.2.3 phpcsstandards/phpcsextra:1.5.1
+          echo "PHPCS_BIN=$TOOLS_DIR/vendor/bin/phpcs" >> "$GITHUB_ENV"
+          echo "PHPCS_INSTALLED_PATHS=$TOOLS_DIR/vendor/wp-coding-standards/wpcs,$TOOLS_DIR/vendor/phpcsstandards/phpcsutils,$TOOLS_DIR/vendor/phpcsstandards/phpcsextra" >> "$GITHUB_ENV"
+
+      - name: phpcs ratchet (changed files, base vs head)
+        run: |
+          set -euo pipefail
+          node .php-gate-src/scripts/php-ratchet.mjs --base "$RUNNER_TEMP/php-base" --head . --files "$RUNNER_TEMP/php-files.txt"

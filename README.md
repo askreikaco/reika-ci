@@ -15,6 +15,39 @@ A project keeps a short `ci.yml` and its own test map, and calls a pinned versio
 - No secrets, hostnames, runner names or project details in this repository. Callers pass them as inputs or secrets.
 - Callers pin a tag (`@v1`); Dependabot proposes updates.
 
+## Gates
+Ratchet gates for legacy repos: each gate compares the BASE ref with the HEAD and fails only when a metric gets worse. Existing debt does not turn CI red on day one; it can only shrink.
+
+CSS (`css-gates.yml`): stylelint violations per rule (`configs/stylelint/reika.cjs`), `!important` count, ID selectors, total bytes (slack 2048 by default). Table goes to the job summary.
+```yaml
+jobs:
+  css:
+    uses: askreikaco/reika-ci/.github/workflows/css-gates.yml@v1
+    with:
+      css_glob: 'css/**/*.css'
+      # bytes_slack: 2048
+      # runner: ubuntu-latest
+```
+
+PHP (`php-gates.yml`): `php -l` on changed `*.php` files (hard fail), then PHPCS with WordPress-Coding-Standards 3.4.1 on the same files as a ratchet (error count must not rise).
+```yaml
+jobs:
+  php:
+    uses: askreikaco/reika-ci/.github/workflows/php-gates.yml@v1
+    with:
+      php_paths: '.'
+```
+
+Rules of the ratchet: a metric passes when head <= base. Bytes pass when growth is within `bytes_slack`. Metrics marked info are printed and never fail.
+
+Exceptions: put a reasoned disable on the line before a deliberate `!important` (or other rule):
+```css
+/* stylelint-disable-next-line declaration-no-important -- imp: <reason> */
+```
+Excepted `!important` lines are not counted. A disable without a `-- <reason>` part fails the stylelint gate.
+
+Planned, not yet in this repo: Knip (dead code), Lighthouse CI (budgets), Playwright (browser tests).
+
 ## Use
 ```yaml
 jobs:

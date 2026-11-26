@@ -1,0 +1,91 @@
+# Reusable CSS ratchet gate: fails only when stylelint violations (per rule), !important,
+# ID selectors or total bytes get worse than the base ref. Legacy debt does not block.
+# Caller:
+#   jobs:
+#     css:
+#       uses: askreikaco/reika-ci/.github/workflows/css-gates.yml@v1
+#       with:
+#         css_glob: 'css/**/*.css'
+name: css-gates
+on:
+  workflow_call:
+    inputs:
+      css_glob:
+        description: glob of CSS files, relative to the repo root (e.g. 'css/**/*.css')
+        type: string
+        required: true
+      bytes_slack:
+        description: allowed growth in total CSS bytes before the gate fails
+        type: number
+        default: 2048
+      runner:
+        description: runner label; empty uses vars.CI_RUNNER, then reika-ci
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  ratchet:
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER || 'reika-ci' }}
+    timeout-minutes: 10
+    steps:
+      - name: checkout head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: resolve base ref
+        id: base
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            echo "sha=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$(git rev-parse --verify -q HEAD~1 || git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.base.outputs.sha }}
+          path: _base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: checkout reika-ci gate sources (same ref as this workflow)
+        uses: actions/checkout@v4
+        with:
+          repository: askreikaco/reika-ci
+          ref: ${{ github.job_workflow_sha }}
+          path: .css-gate-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: install gate tools (outside the repo, no-save)
+        env:
+          TOOLS_DIR: ${{ runner.temp }}/css-gate
+        run: |
+          set -euo pipefail
+          mkdir -p "$TOOLS_DIR"
+          cd "$TOOLS_DIR"
+          npm init -y > /dev/null
+          npm i --ignore-scripts --save-exact stylelint@18.1.0 @projectwallace/css-analyzer@10.0.0 fast-glob@3.3.3
+
+      - name: css ratchet (base vs head)
+        env:
+          CSS_GATE_TOOLS: ${{ runner.temp }}/css-gate
+          CSS_GLOB: ${{ inputs.css_glob }}
+          BYTES_SLACK: ${{ inputs.bytes_slack }}
+        run: |
+          set -euo pipefail
+          node .css-gate-src/scripts/css-ratchet.mjs --base _base --head . --glob "$CSS_GLOB" --bytes-slack "$BYTES_SLACK"

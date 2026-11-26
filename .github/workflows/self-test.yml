@@ -1,0 +1,73 @@
+# Self-test for the gates in this repo. GitHub-hosted runners only: fork PRs must never reach our machines.
+name: self-test
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  css-ratchet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: install gate tools
+        env:
+          TOOLS_DIR: ${{ runner.temp }}/css-gate
+        run: |
+          set -euo pipefail
+          mkdir -p "$TOOLS_DIR" && cd "$TOOLS_DIR"
+          npm init -y > /dev/null
+          npm i --ignore-scripts --save-exact stylelint@18.1.0 @projectwallace/css-analyzer@10.0.0 fast-glob@3.3.3
+      - name: ok fixture passes (exit 0)
+        env:
+          CSS_GATE_TOOLS: ${{ runner.temp }}/css-gate
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/css-fx"; rm -rf "$d"; mkdir -p "$d/base" "$d/ok" "$d/bad"
+          cp tests/fixtures/base.css "$d/base/style.css"
+          cp tests/fixtures/head-ok.css "$d/ok/style.css"
+          cp tests/fixtures/head-bad.css "$d/bad/style.css"
+          set +e
+          node scripts/css-ratchet.mjs --base "$d/base" --head "$d/ok" --glob '*.css'
+          rc=$?
+          set -e
+          test "$rc" -eq 0 || { echo "::error::expected exit 0 for ok fixture, got $rc"; exit 1; }
+          echo "ok fixture: exit 0 as expected"
+      - name: bad fixture fails (exit 1)
+        env:
+          CSS_GATE_TOOLS: ${{ runner.temp }}/css-gate
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/css-fx"
+          set +e
+          node scripts/css-ratchet.mjs --base "$d/base" --head "$d/bad" --glob '*.css'
+          rc=$?
+          set -e
+          test "$rc" -eq 1 || { echo "::error::expected exit 1 for bad fixture, got $rc"; exit 1; }
+          echo "bad fixture: exit 1 as expected"
+
+  php-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: valid PHP passes php -l
+        run: php -l tests/fixtures/php/ok.php
+      - name: syntax-error PHP must fail php -l
+        run: |
+          set +e
+          php -l tests/fixtures/php/bad.php
+          rc=$?
+          set -e
+          test "$rc" -ne 0 || { echo "::error::php -l accepted a syntax error"; exit 1; }
+          echo "bad PHP fixture: php -l failed as expected"
