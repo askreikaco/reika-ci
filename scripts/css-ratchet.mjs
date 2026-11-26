@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CSS ratchet: compare a BASE tree with a HEAD tree and fail only when a metric gets worse.
 // Usage: node css-ratchet.mjs --base <dir> --head <dir> --glob '<glob>' [--bytes-slack 2048]
-// Needs Node 20+. Stylelint, fast-glob and @projectwallace/css-analyzer are resolved from
+// Needs Node 22.22+ (stylelint 18 engines). Stylelint, fast-glob and @projectwallace/css-analyzer are resolved from
 // CSS_GATE_TOOLS (a dir with node_modules), default: the current working directory.
 import { createRequire } from 'node:module';
 import { readFileSync, statSync, appendFileSync } from 'node:fs';
