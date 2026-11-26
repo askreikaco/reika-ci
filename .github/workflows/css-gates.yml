@@ -66,11 +66,6 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: install gate tools (outside the repo, no-save)
         env:
           TOOLS_DIR: ${{ runner.temp }}/css-gate
