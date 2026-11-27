@@ -241,23 +241,24 @@ function tokenDefs(root, cssFiles) {
   return defs;
 }
 
-// Literal value of a token, following pure var(--other) aliases.
-function resolvedToken(name, defs, depth = 0) {
-  const v = defs.get(name).value;
-  const alias = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v);
-  if (alias && defs.has(alias[1]) && depth < 10) return resolvedToken(alias[1], defs, depth + 1);
-  return normToken(v);
-}
+// A pure alias is var(--other) and holds no value of its own: a semantic token pointing at a primitive is not a duplicate.
+const isPureAlias = (value) => /^var\(\s*--[\w-]+\s*\)$/.test(value.trim());
 
-// New tokens whose resolved value equals another token's value in HEAD (each new token counts once).
+// New literal tokens whose normalised value equals another literal token's value in HEAD (each new literal counts once).
+// Only literal definitions are holders; a new alias is never a duplicate.
 function duplicateNewTokens(headDefs, newNames) {
   const byValue = new Map();
-  for (const name of headDefs.keys()) {
-    const k = resolvedToken(name, headDefs);
+  for (const [name, def] of headDefs) {
+    if (isPureAlias(def.value)) continue;
+    const k = normToken(def.value);
     if (!byValue.has(k)) byValue.set(k, []);
     byValue.get(k).push(name);
   }
-  return newNames.filter((name) => byValue.get(resolvedToken(name, headDefs)).length > 1);
+  return newNames.filter((name) => {
+    const def = headDefs.get(name);
+    if (isPureAlias(def.value)) return false;
+    return byValue.get(normToken(def.value)).length > 1;
+  });
 }
 
 // Every var(--name) reference in the tree (css, js, php). Raw text: a reference in a comment still counts.

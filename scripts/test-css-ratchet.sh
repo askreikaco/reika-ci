@@ -39,6 +39,9 @@ run 0 "raw_px exempt: border width, shadow, @media, 0/1/2px" base px-ok
 # token_dup_new (base has pre-existing duplicates; only new ones count)
 run 0 "token dup: unchanged duplicates pass"  dup-base dup-base
 run 1 "token dup: new duplicates fail"        dup-base dup-bad
+run 0 "token dup: new alias of new primitive passes (existing token became alias)" alias-base alias-pair
+run 0 "token dup: new alias of existing literal passes" base alias-new
+run 1 "token dup: two new literals with same value fail" base literal-pair
 
 # token_unused_new (warn by default, fail with --strict-tokens)
 run 0 "token unused new: warn only"           base unused

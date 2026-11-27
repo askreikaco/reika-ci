@@ -1,0 +1,4 @@
+:root { --brand: #123456; }
+.a { color: var(--brand); margin: 0; }
+.legacy { color: #fff; }
+.tok { --ics-marquee-gap: var(--size-48); --size-48: 48px; }
