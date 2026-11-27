@@ -18,6 +18,14 @@ on:
         description: allowed growth in total CSS bytes before the gate fails
         type: number
         default: 2048
+      token_glob:
+        description: glob of the token file(s) (e.g. 'css/tokens.css'); raw colour/px are allowed there. Empty = none
+        type: string
+        default: ''
+      strict_tokens:
+        description: fail when a new custom property has no var(--name) use in css/js/php (default warn only)
+        type: boolean
+        default: false
       runner:
         description: runner label; empty uses vars.CI_RUNNER, then reika-ci
         type: string
@@ -86,9 +94,14 @@ jobs:
           CSS_GATE_TOOLS: ${{ runner.temp }}/css-gate
           CSS_GLOB: ${{ inputs.css_glob }}
           BYTES_SLACK: ${{ inputs.bytes_slack }}
+          TOKEN_GLOB: ${{ inputs.token_glob }}
+          STRICT_TOKENS: ${{ inputs.strict_tokens }}
         run: |
           set -euo pipefail
-          node .css-gate-src/scripts/css-ratchet.mjs --base _base --head . --glob "$CSS_GLOB" --bytes-slack "$BYTES_SLACK"
+          args=(--base _base --head . --glob "$CSS_GLOB" --bytes-slack "$BYTES_SLACK")
+          if [ -n "$TOKEN_GLOB" ]; then args+=(--token-glob "$TOKEN_GLOB"); fi
+          if [ "$STRICT_TOKENS" = "true" ]; then args+=(--strict-tokens); fi
+          node .css-gate-src/scripts/css-ratchet.mjs "${args[@]}"
 
   # uploads/ is media-only (owner 2026-11-27). Any add/modify under uploads/ (any file type) fails.
   # Delete and move-out are allowed (ratchet down). Self-test runs first.
