@@ -188,12 +188,14 @@ async function tokenExemptSet(root, tokenGlob) {
   return new Set(await listFiles(root, tokenGlob));
 }
 
-function analyzeRaw(root, files, exempt) {
+function analyzeRaw(root, files, exempt, hasTokenGlob) {
   const t = { color: 0, px: 0 };
   for (const f of files) {
     if (exempt.has(f)) continue;
     for (const d of cssDeclarations(readText(root, f))) {
-      if (d.prop.startsWith('--')) continue; // custom-property definitions are the token layer
+      // Without --token-glob, custom-property definitions are exempt everywhere (legacy behaviour).
+      // With it, they are exempt only inside token files (exempt set); elsewhere their raw values count.
+      if (d.prop.startsWith('--') && !hasTokenGlob) continue;
       const prop = d.prop.toLowerCase();
       t.color += countMatches(d.value, HEX_RE) + countMatches(d.value, FN_COLOR_RE);
       if (!/^font(-family)?$/.test(prop)) t.color += countMatches(d.value, NAMED_RE);
@@ -282,8 +284,10 @@ async function main() {
 
   const baseExempt = await tokenExemptSet(base, opts.tokenGlob);
   const headExempt = await tokenExemptSet(head, opts.tokenGlob);
-  const baseRaw = analyzeRaw(base, baseFiles, baseExempt);
-  const headRaw = analyzeRaw(head, headFiles, headExempt);
+  const hasTokenGlob = Boolean(opts.tokenGlob);
+  if (!hasTokenGlob) console.log('raw_*: custom properties exempt everywhere (no --token-glob)');
+  const baseRaw = analyzeRaw(base, baseFiles, baseExempt, hasTokenGlob);
+  const headRaw = analyzeRaw(head, headFiles, headExempt, hasTokenGlob);
 
   // Token metrics scan the whole tree: token files are rarely inside --glob, and usage can be in js/php.
   const baseCss = await listFiles(base, '**/*.css');

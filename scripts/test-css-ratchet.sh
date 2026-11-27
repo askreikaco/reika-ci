@@ -29,6 +29,8 @@ run 0 "raw_color better passes"               base color-better
 run 1 "raw_color token-glob off: raw file fails" base tokens-raw
 run 0 "raw_color token-glob exempts token file" base tokens-raw --token-glob 'tokens/**'
 run 0 "custom property with raw colour is exempt" base custom-prop
+run 1 "local custom prop outside token file counts (token-glob set)" base local-prop --token-glob 'tokens/**'
+run 0 "local custom prop exempt when no token-glob (legacy)"        base local-prop
 
 # raw_px
 run 1 "raw_px worse fails"                    base px-bad
