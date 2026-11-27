@@ -89,3 +89,42 @@ jobs:
         run: |
           set -euo pipefail
           node .css-gate-src/scripts/css-ratchet.mjs --base _base --head . --glob "$CSS_GLOB" --bytes-slack "$BYTES_SLACK"
+
+  # uploads/ is media-only (owner 2026-11-27). Any add/modify under uploads/ (any file type) fails.
+  # Delete and move-out are allowed (ratchet down). Self-test runs first.
+  uploads-media-only:
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER || 'reika-ci' }}
+    timeout-minutes: 5
+    steps:
+      - name: checkout caller (full history for base diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: checkout reika-ci gate sources (same ref as this workflow)
+        uses: actions/checkout@v4
+        with:
+          repository: askreikaco/reika-ci
+          ref: ${{ github.job_workflow_sha }}
+          path: .css-gate-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: uploads media-only gate
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          bash .css-gate-src/scripts/test-uploads-media-only.sh
+          if [ "$EVENT" = "pull_request" ]; then
+            BASE="$PR_BASE"; HEAD="$PR_HEAD"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            BASE="$PUSH_BEFORE"; HEAD="$GITHUB_SHA"
+          else
+            BASE=$(git rev-parse HEAD~1); HEAD=$(git rev-parse HEAD)
+          fi
+          bash .css-gate-src/scripts/uploads-media-only.sh "$BASE" "$HEAD"
