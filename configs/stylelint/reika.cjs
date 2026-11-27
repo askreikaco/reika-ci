@@ -15,7 +15,13 @@ module.exports = {
       '/\\.brx-/',
       '/body\\.page-id-/',
       '/\\.postid-/',
+      // REIKA CONDITIONAL SELECTORS (css-authoring §I.13, owner 2026-11-27): :is() around :not() or an ID
+      '/:is\\([^)]*:not\\(/',
+      '/:is\\([^)]*#/',
     ],
+    // REIKA §I.13 (owner 2026-11-27): no :not()/:has(), no attribute substring operators
+    'selector-pseudo-class-disallowed-list': ['not', 'has'],
+    'selector-attribute-operator-disallowed-list': ['*=', '^=', '$='],
     'selector-max-specificity': '0,3,0',
     'no-duplicate-selectors': true,
   },
