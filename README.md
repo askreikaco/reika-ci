@@ -19,6 +19,7 @@ A project keeps a short `ci.yml` and its own test map, and calls a pinned versio
 Ratchet gates for legacy repos: each gate compares the BASE ref with the HEAD and fails only when a metric gets worse. Existing debt does not turn CI red on day one; it can only shrink.
 
 CSS (`css-gates.yml`): stylelint violations per rule (`configs/stylelint/reika.cjs`), `!important` count, ID selectors, total bytes (slack 2048 by default). Table goes to the job summary.
+Also: `raw_color` / `raw_px` (raw colour literals and px in declarations, counted like ics.org.vn `code-debt-check`; border/shadow px and custom-property definitions are exempt), `token_dup_new` (a new custom property whose resolved value repeats another token: fails) and `token_unused_new` (a new custom property with no `var(--name)` in css/js/php: warns, fails with `strict_tokens: true`). Consumers pass `token_glob` for their token file, where raw values are allowed.
 ```yaml
 jobs:
   css:

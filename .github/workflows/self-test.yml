@@ -41,6 +41,11 @@ jobs:
           set -e
           test "$rc" -eq 0 || { echo "::error::expected exit 0 for ok fixture, got $rc"; exit 1; }
           echo "ok fixture: exit 0 as expected"
+      - name: raw colour/px and token dup/unused metrics (self-test)
+        env:
+          CSS_GATE_TOOLS: ${{ runner.temp }}/css-gate
+        run: bash scripts/test-css-ratchet.sh
+
       - name: bad fixture fails (exit 1)
         env:
           CSS_GATE_TOOLS: ${{ runner.temp }}/css-gate

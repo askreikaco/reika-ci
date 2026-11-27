@@ -1,0 +1,4 @@
+:root { --brand: #123456; }
+.a { color: var(--brand); margin: 0; }
+.legacy { color: #fff; }
+:root { --x1: #000; --x2: #000; --a1: #fff; --a2: #ffffff; --a3: rgb(255 255 255); --a4: var(--a1); }
